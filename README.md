@@ -70,9 +70,6 @@ The analysis follows a standard Seurat pipeline:
 - `scRNA-seq-lab1-melms2021.html`  
   - Rendered HTML report with all figures and interpretations.
 
-*(Optional in the future)*  
-You can add a `figures/` folder with exported PNGs for PCA, UMAP, and QC plots.
-
 ---
 
 ## 💻 How to run the analysis
