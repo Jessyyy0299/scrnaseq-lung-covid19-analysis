@@ -1,0 +1,360 @@
+---
+title: "Lab1 - ScRNA-seq Data Analysis - Melms2021"
+author: "Jessy Xue"
+output:
+  html_document: default
+  pdf_document: default
+date: "10/25/25"
+---
+
+In this notebook, we will re-analyze the data from the paper "A molecular single-cell lung atlas of lethal COVID-19" Melms, et al., 2021. 
+
+Your task is to complete some of the code chucks as indicated in each section and regenerate the plots/results. 
+
+After completing the code chucks, please save this notebook and click `Knit to HTML` option under the `Knit` icon at the top to generate a corresponding html file.
+
+
+```{r}
+.libPaths("/nfs/roberts/project/beng469f/shared/R/4.4.1-foss-2022b/")
+```
+
+# Load the packages
+
+Let's first load the packages that we need for the analysis. 
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(ggplot2)
+library(viridis)
+```
+# Load data
+
+# Load data
+
+Here, for the purpose of data re-analysis, the raw data has already been pre-processed and saved into a Seurat object, we just to  need to load the processed Seurat object into memory. 
+
+```{r}
+lung_seurat <- readRDS('/nfs/roberts/project/beng469f/beng469f_my393/assignment1/lung_seurat.rds')
+```
+
+
+# Visualization of the whole data
+
+This Seurat object includes many useful metadata (You can use `colnames(lung.seurat@meta.data)` to check the full list). In particular, `"group"` indicates the corresponding COVID groups (Control or COVID-19), `"cell_type_main"`, `"cell_type_intermediate"`, and `"cell_type_fine"` indicate cell type labels at different granularity (major cell types, intermediate granularity, and fine granularity) , respectively. 
+
+**TASK 1**: Please write codes in the following code chunk using UMAP to visualize the data, and color the cells by COVID groups and intermediate granular cell types labels separately.
+
+Hint : UMAP has been run and the corresponding embeddings are stored inside the Seurat object already. All you need to do here is to plot.
+(Optional: If you want to match the color as shown in Fig. 1c in the paper, add `cols= c('#006E82', '#AA0A3C')` parameter)
+
+```{r task1_umap_group}
+
+# ——— sanity check (optional, but very helpful for debugging) ———
+colnames(lung_seurat@meta.data)  # purpose: quick inspection of metadata fields to avoid typos
+
+# ——— UMAP colored by COVID group ———
+DimPlot(
+  object    = lung_seurat,       # purpose: the Seurat object that already contains UMAP embeddings
+  reduction = "umap",            # purpose: tell DimPlot to use the precomputed UMAP coordinates
+  group.by  = "group",           # purpose: color cells by 'group' (Control vs COVID-19)
+  shuffle   = TRUE,              # purpose: randomize plotting order to reduce overplotting bias
+  pt.size   = 0.4,               
+  cols      = c('#006E82', '#AA0A3C')  
+) + 
+  ggtitle("UMAP colored by COVID group")  # purpose: add a clear title in the knitted report
+
+# ——— UMAP colored by intermediate-level cell types ———
+DimPlot(
+  object    = lung_seurat,         
+  reduction = "umap",                  
+  group.by  = "cell_type_intermediate", 
+  shuffle   = TRUE,                    
+  pt.size   = 0.4,                      
+  label     = TRUE,                  
+  label.size= 3                         
+) + 
+  ggtitle("UMAP colored by intermediate-level cell types")  # purpose: title for the second plot
+
+
+```
+
+After finishing this task, let's remove this object from memory by executing the code chuck below. 
+
+```{r 1_remove}
+rm(lung_seurat)
+gc()
+```
+
+# Analysis of the alveolar epithelial cells
+
+Next, let's focus on the alveolar epithelial cells (AT1 and AT2 cells) in the data. Let's first load the alveolar epithelial cells data.
+
+
+```{r r_1read}
+alv_epi_cells.seurat <- readRDS("/nfs/roberts/project/beng469f/shared/HW1/lung_avl_epi.RDS")
+```
+
+
+In the paper, the authors found that COVID-19 AT2 cells displayed decreased expression of ETV5 (Fig. 3d), a transcription factor that is required for maintaining AT2 cell identity. Decreased ETV5 expression is associated with differentiation towards AT1 cells, indicating that AT2 cells had initiated a regeneration program. Also, they found that CAV1, a marker of late AT1 maturation24, was expressed at lower levels in AT1 cells from COVID-19 lungs (Fig. 3e).
+
+**TASK 2**: Please write codes in the following code chunk below to generate two separate violin plots: (1) comparing the expression levels of ETV5 between Control and COVID-19 groups in AT2 cells. (2) comparing the expression levels of CAV1 between Control and COVID-19 groups in AT1 cells.
+
+(Hint 1: You can use the `subset()` function to subset the Seurat objects. AT1 and AT2 cells can be selected via logical expression `cell_type_fine == "AT1"` and `cell_type_fine == "AT2"`).
+
+(Hint 2: Check the parameters of VlnPlot to see how to compare between Control and COVID-19 group (metadata name is `"group"`)). You need to set the default assay to RNA.
+
+
+```{r task2_violin}
+
+# ---- TASK 2: Violin plots for ETV5 (AT2) and CAV1 (AT1) by COVID group ----
+# Purpose: compare gene expression between Control and COVID-19 within specific alveolar epithelial subsets.
+
+# Use RNA assay so plots reflect log-normalized RNA expression values
+DefaultAssay(alv_epi_cells.seurat) <- "RNA"
+
+# ----- AT2 subset & ETV5 violin -----
+# Subset object to AT2 cells based on fine-grained cell-type label
+alv_AT2 <- subset(alv_epi_cells.seurat, subset = cell_type_fine == "AT2")
+# Order groups for consistent x-axis (Control -> COVID-19)
+alv_AT2$group <- factor(alv_AT2$group, levels = c("Control","COVID-19"))
+
+# Build the violin plot comparing ETV5 between groups in AT2 cells
+p_at2_etv5 <- VlnPlot(
+  object   = alv_AT2,          # AT2-only cells
+  features = "ETV5",           # gene to visualize
+  group.by = "group",          # split violins by COVID group
+  pt.size  = 0.1               # tiny dots to show single-cell dispersion
+) + 
+  labs(title = "AT2 cells: ETV5 expression by group",
+       x = NULL, y = "log-normalized expression")
+
+# ----- AT1 subset & CAV1 violin -----
+# Subset object to AT1 cells
+alv_AT1 <- subset(alv_epi_cells.seurat, subset = cell_type_fine == "AT1")
+# Order groups for consistent x-axis
+alv_AT1$group <- factor(alv_AT1$group, levels = c("Control","COVID-19"))
+
+# Build the violin plot comparing CAV1 between groups in AT1 cells
+p_at1_cav1 <- VlnPlot(
+  object   = alv_AT1, 
+  features = "CAV1",
+  group.by = "group",
+  pt.size  = 0.1
+) + 
+  labs(title = "AT1 cells: CAV1 expression by group",
+       x = NULL, y = "log-normalized expression")
+
+# ----- Render the plots in the notebook -----
+p_at2_etv5
+p_at1_cav1
+
+# ----- (Optional) Save high-resolution copies for submission -----
+ggsave("fig_task2_AT2_ETV5_violin.png", p_at2_etv5, width = 6, height = 5, dpi = 300)
+ggsave("fig_task2_AT1_CAV1_violin.png", p_at1_cav1, width = 6, height = 5, dpi = 300)
+
+
+```
+
+Among these alveolar epithelial cells, a group of damage-associated transient progenitors (DATPs) cells was identified in the paper, as shown below in the UMAP visualization.  
+
+```{r task2_intermediate}
+DimPlot(alv_epi_cells.seurat,reduction = "umap",group.by = "group",shuffle = T,cols= c('#006E82', '#AA0A3C'))
+DimPlot(alv_epi_cells.seurat,reduction = "umap",group.by = "cell_type_ourdatp",shuffle = T, cols = c('#0072B2', '#0AB45A', '#FA5078'))
+```
+
+To help identify these DATPs, the authors developed a DATP signature from different DATP marker genes (see Methods section).
+
+**TASK 3**: Plot the signature scores on top of the cell UMAP embeddings using `FeaturePlot()` function, and see which cell group has high scores.
+
+Hint: The feature name for the signature scores is `"our_DATP_sig1"` in the meta data column.
+
+
+```{r task3_datp_featureplot}
+
+# ---- TASK 3: Plot DATP signature (our_DATP_sig1) on UMAP with FeaturePlot ----
+# Goal: overlay the DATP signature scores on the UMAP of alveolar epithelial cells
+# so we can visually identify which cell populations have high DATP scores.
+
+# 1) Sanity check: make sure the signature column exists in metadata.
+stopifnot("our_DATP_sig1" %in% colnames(alv_epi_cells.seurat@meta.data))
+
+# 2) Ensure the signature is numeric (some pipelines store it as character).
+alv_epi_cells.seurat$our_DATP_sig1 <- as.numeric(alv_epi_cells.seurat$our_DATP_sig1)
+
+# 3) Use RNA assay for consistency with previous plots (not strictly required for FeaturePlot on metadata).
+DefaultAssay(alv_epi_cells.seurat) <- "RNA"
+
+# 4) Compute a robust color range (1st–99th percentile) to improve contrast on the map.
+q <- quantile(alv_epi_cells.seurat$our_DATP_sig1, probs = c(0.01, 0.99), na.rm = TRUE)
+
+# 5) Draw the UMAP with the signature scores. 
+#    - reduction="umap": use the precomputed UMAP coordinates
+#    - order=TRUE: plot higher values last so they are not overplotted
+#    - min/max.cutoff: clip extreme values to stabilize color scaling
+p_datp <- FeaturePlot(
+  object    = alv_epi_cells.seurat,
+  features  = "our_DATP_sig1",
+  reduction = "umap",
+  order     = TRUE,
+  min.cutoff = q[1],
+  max.cutoff = q[2]
+) +
+  scale_color_viridis_c() +
+  labs(
+    title = "DATP signature score (our_DATP_sig1) on UMAP",
+    color = "Signature\nscore"
+  )
+
+# 6) Print the plot to the report.
+p_datp
+
+# (Optional diagnostics you can uncomment if needed)
+# VlnPlot(alv_epi_cells.seurat, features = "our_DATP_sig1", group.by = "cell_type_ourdatp", pt.size = 0) +
+#   labs(title = "DATP signature by DATP annotation")
+# VlnPlot(alv_epi_cells.seurat, features = "our_DATP_sig1", group.by = "group", pt.size = 0.1) +
+#   labs(title = "DATP signature by COVID group")
+
+
+```
+
+
+After finishing this task, let's remove this object from memory by executing the code chuck below. 
+
+```{r r_3remove}
+rm(alv_epi_cells.seurat)
+gc()
+```
+
+# Detailed annotation of fibroblasts in this study 
+
+Let's first load the fibroblast data.
+
+```{r r_3read}
+fibroblast.seurat <-  readRDS("/nfs/roberts/project/beng469f/beng469f_my393/assignment1/lung_fibro.RDS")
+```
+
+In this paper, the authors spent huge efforts annotating the fibroblast populations to fine granularity. Below is a list of representive markers used for the fibroblast subtype identification (see Supplementary Table 4 for full reference) .
+
+```{r r_3read2}
+fibroblast_marker_genes_selected <- c("MACF1","ABCA10","COL1A1","NCAM2","PDGFRB","MYH11","VWF","PKHD1L1","ITGBL1")
+```
+
+**TASK 4**: Complete the DotPlot function below to visualize the expression levels of these markers among the fine granular cell types.
+
+
+```{r task4_dotplot}
+
+# ---- TASK 4: DotPlot of fibroblast subtype markers across fine-grained cell types ----
+DefaultAssay(fibroblast.seurat) <- "RNA"
+
+DotPlot(
+  fibroblast.seurat,
+  features = fibroblast_marker_genes_selected,
+  group.by = "cell_type_fine"
+) +
+  scale_color_viridis_c() +
+  RotatedAxis() +
+  labs(
+    title = "Fibroblast subtype markers across fine-grained cell types",
+    x = "Marker genes",
+    y = "Fibroblast subtypes",
+    color = "Avg. expression",
+    size = "Pct. expressing"
+  )
+
+```
+
+After finishing this task, let's remove this object from memory by executing the code chuck below. 
+
+```{r r_4remove}
+rm(fibroblast.seurat)
+gc()
+```
+
+
+# Differential analysis of the alveolar macrophages between COVID and Control groups 
+
+
+One important finding in the paper is that myeloid cells from individuals with COVID-19 were highly and aberrantly activated. 
+here let's focus on the differential gene expression analysis of the alveolar macrophages between COVID and Control groups. 
+
+Similarly, let's first load the data corresponding to alveolar macrophages.
+
+```{r r_4read}
+alv_macro.seurat <- readRDS("/nfs/roberts/project/beng469f/beng469f_my393/assignment1/lung_alv_macro.RDS")
+```
+
+**TASK 5**: In the code chuck below: please (1) complete `FindAllMarkers()` function to identify the differentially expressed genes of the alveolar macrophages between COVID and Control groups, and (2) complete `DoHeatmap()` to visualize the expression levels of the top 10 DEGs of each group in a heatmap
+
+Hint: The parameters to use for `FindAllMarkers()` are specified in the paper's Methods section. 
+
+```{r task5_deg_and_heatmap}
+
+# ---- TASK 5: DEGs in alveolar macrophages (COVID-19 vs Control) + heatmap ----
+# Goal:
+# (1) Identify differentially expressed genes (DEGs) between COVID-19 and Control groups
+#     among alveolar macrophages using FindAllMarkers().
+# (2) Plot a heatmap of the top 10 upregulated genes for each group.
+
+# Assumptions:
+# - Object 'alv_macro.seurat' is already loaded (per earlier chunk).
+# - The COVID status is stored in metadata column 'group' with values like "Control", "COVID-19".
+# - Expression values are in the RNA assay.
+
+# 0) Ensure we read expression from RNA assay
+DefaultAssay(alv_macro.seurat) <- "RNA"
+
+# 1) Set identities to the COVID group so FindAllMarkers contrasts groups
+Idents(alv_macro.seurat) <- factor(alv_macro.seurat$group, levels = c("Control","COVID-19"))
+# purpose: identities ("Idents") define groups compared by FindAllMarkers; we order for consistency.
+
+# 2) Run differential expression
+# Typical parameters aligned with common scRNA-seq practice and methods in similar re-analyses:
+# - only.pos = TRUE: report genes upregulated in each identity (here, each group)
+# - test.use = "wilcox": Wilcoxon rank-sum test per gene
+# - min.pct = 0.25: gene must be expressed in at least 25% of cells in either group
+# - logfc.threshold = 0.25: minimum log2 fold change to be considered
+# - return.thresh = 0.05: adjusted p-value (FDR) cutoff
+lung_alv_marco.markers <- FindAllMarkers(
+  object         = alv_macro.seurat,
+  only.pos       = TRUE,
+  test.use       = "wilcox",
+  min.pct        = 0.25,
+  logfc.threshold= 0.25,
+  return.thresh  = 0.05
+)
+
+# 3) Select top 10 DEGs (by avg_log2FC) from each group
+# NOTE: dplyr::slice_max is the modern replacement for top_n.
+lung_alv_marco.markers.top10 <- lung_alv_marco.markers %>%
+  dplyr::group_by(cluster) %>%                       # 'cluster' here equals the identity (group)
+  dplyr::slice_max(order_by = avg_log2FC, n = 10, with_ties = FALSE) %>%
+  dplyr::arrange(cluster, dplyr::desc(avg_log2FC))
+
+# 4) Prepare features and (optionally) scale them to improve heatmap contrast
+features_top <- unique(lung_alv_marco.markers.top10$gene)
+alv_macro.seurat <- ScaleData(alv_macro.seurat, features = features_top, verbose = FALSE)
+# purpose: centers/scales only the selected features for nicer z-score heatmap without altering the object broadly
+
+# 5) Draw the heatmap of top DEGs per group
+# - group.by = "group": columns grouped by COVID vs Control
+# - raster = TRUE: faster plotting for large cell numbers
+# - size: controls label text size for row names
+DoHeatmap(
+  object   = alv_macro.seurat,
+  features = features_top,
+  group.by = "group",
+  raster   = TRUE,
+  size     = 3
+) + ggtitle("Alveolar macrophages: Top 10 upregulated genes per group")
+
+# (Optional) Save a high-resolution copy
+# ggsave("fig_task5_alv_mac_topDEG_heatmap.png", width = 10, height = 7, dpi = 300)
+
+# (Optional) If you also want *downregulated* genes per group:
+# rerun FindAllMarkers with only.pos = FALSE, then split by sign(avg_log2FC) within each cluster.
+
+
+```
+After completing the code chucks, please save this notebook and click `Knit to HTML` option under the `Knit` icon at the top to generate a corresponding html file.
