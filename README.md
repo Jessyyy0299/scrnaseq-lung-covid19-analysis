@@ -1,6 +1,14 @@
 # scRNAseq-Melms2021-Analysis
 Single-cell RNA-seq analysis of Melms2021 COVID-19 lung dataset using Seurat
 
+### ⭐ Project Highlights
+- Performed full Seurat workflow on Melms2021 lung scRNA-seq dataset  
+- Included QC, normalization, variable feature selection, and scaling  
+- Conducted PCA, UMAP, and clustering to identify major cell populations  
+- Visualized marker genes to interpret biological identities of clusters  
+- Generated biologically meaningful insights into lung immune and epithelial compartments  
+
+
 # scRNAseq-Melms2021-Analysis
 
 Single-cell RNA-seq analysis of the **Melms et al. 2021** COVID-19 lung dataset using **Seurat** in R.
